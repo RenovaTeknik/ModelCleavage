@@ -2,6 +2,8 @@
 
 Model Cleavage is a local web application for turning painted regions of a single-mesh OrcaSlicer 3MF into separate solid parts, with matching pockets for assembly after printing.
 
+![Model Cleavage showing the painted BasicShapes model, selectable colour regions and cut settings.](docs/images/model-cleavage-preview.png)
+
 Instead of redrawing a model or splitting it in CAD, the user selects a particular painted area, chooses an insertion direction and a depth into the body, then previews the separated part and its matching cavity.
 
 **Status:** working local prototype, under active development. These documents describe the current local application. Application source, dependencies and installation instructions have not yet been published in this repository.
