@@ -1,6 +1,6 @@
 # Model Cleavage Roadmap
 
-Updated **16 October 2026**. This roadmap describes the working local prototype and intended next stages. It is not a release schedule; priorities can change as geometry and printing tests expose new requirements. Application source has not yet been published in this repository.
+Updated **16 October 2026**. This roadmap describes the v0.1.0 release and intended next stages. It is not a release schedule; priorities can change as geometry and printing tests expose new requirements. The first application source release is **v0.1.0 — First Cut**.
 
 ## Working foundation
 
@@ -20,7 +20,7 @@ Updated **16 October 2026**. This roadmap describes the working local prototype 
 - [x] Export aligned multipart 3MF assemblies, validation settings and precision-checked STLs.
 - [x] Keep desktop viewer height stable with independently scrolling panels.
 
-## 1. Geometry reliability and inspection
+## v0.1.x — Geometry reliability and inspection
 
 - [ ] Expand regression coverage across organic meshes, imperfect paint borders, narrow features, holes and returning geometry.
 - [ ] Detect attached thin walls, fins and spurs, beyond the current detached-fragment filter.
@@ -30,7 +30,7 @@ Updated **16 October 2026**. This roadmap describes the working local prototype 
 - [ ] Preserve remaining original paint regions in exported base meshes.
 - [ ] Improve cut performance through profiling, reusable computations and local geometry processing while retaining full-feature coverage checks.
 
-## 2. Project workflow and multiple parts
+## v0.2.0 target — Project workflow and multiple parts
 
 - [ ] Excise several parts within one working model.
 - [ ] Give parts stable identities and user-defined names.
@@ -38,11 +38,13 @@ Updated **16 October 2026**. This roadmap describes the working local prototype 
 - [ ] Reset the model to its original project state.
 - [ ] Export only selected parts while retaining assembly alignment.
 - [ ] Save and load local projects, including source geometry, approved repairs, edits, named parts, cut settings and reversible history.
-- [ ] Publish the application source and a reproducible installation/dependency setup.
+- [x] Publish the application source, BasicShapes example and documented dependency setup.
+
+Project persistence and section inspection are provisional v0.3.0 goals. A v1.0.0 release needs a dependable documented workflow and broader model and physical-print validation.
 
 Stable part identities and a dependency-aware cut history are prerequisites for reliable selective undo and project persistence.
 
-## 3. Interactive junction editing
+## Later revisions — Interactive junction editing
 
 - [ ] Add a local brush for selected stretches of a paint boundary.
 - [ ] Add adaptive remeshing where existing triangles cannot support a smooth junction.
@@ -50,7 +52,7 @@ Stable part identities and a dependency-aware cut history are prerequisites for 
 - [ ] Expose clear panning controls and discoverable navigation hints alongside orbit and zoom.
 - [ ] Extend editing history and support standalone saving of edited meshes.
 
-## 4. Connections and manufacturing fit
+## Later revisions — Connections and manufacturing fit
 
 - [ ] Add ball/socket connections.
 - [ ] Add slide-fit connections and assembly lead-ins.

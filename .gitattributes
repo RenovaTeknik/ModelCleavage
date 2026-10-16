@@ -1,0 +1,4 @@
+*.3mf binary
+*.png binary
+# Retain upstream vendor formatting.
+web/vendor/** -whitespace

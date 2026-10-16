@@ -1,0 +1,16 @@
+# Local environments and generated files
+.runtime/
+.venv/
+node_modules/
+__pycache__/
+*.pyc
+.env
+.env.*
+output/*
+!output/.gitkeep
+# Historical local investigations and private model diagnostics
+# Public documentation is curated explicitly below.
+docs/*
+!docs/architecture.md
+!docs/images/
+!docs/images/**

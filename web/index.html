@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Model Cleavage v0.1.0 · First Cut</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='8' fill='%23181d1f'/%3E%3Ctext x='20' y='29' text-anchor='middle' font-size='32' fill='%23b8ed92'%3E%E2%97%88%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="/style.css">
+<script type="importmap">{"imports":{"three":"/vendor/three.module.js"}}</script>
+</head>
+<body>
+<header>
+  <a class="brand" href="/" aria-label="Model Cleavage home"><span class="brand-mark">◈</span><span>MODEL CLEAVAGE<small>Cutting engine</small></span></a>
+  <div class="local"><i></i>LOCAL WORKSPACE</div>
+  <button id="open-file" class="primary">Open 3MF <span>↗</span></button><input id="file" type="file" accept=".3mf" hidden>
+</header>
+<main>
+ <aside class="left-panel">
+  <div class="section-title"><span>01 / SOURCE</span><span class="chip" title="First Cut">v0.1.0 · First Cut</span></div>
+  <h1>From paint<br>to parts.</h1>
+  <p class="intro">Pick a painted area. Define its cut.<br>Make it a separate solid.</p>
+  <div class="source-card"><span class="small-label">CURRENT MODEL</span><strong id="model-name">No model loaded</strong><span id="model-stats">Single-mesh OrcaSlicer projects</span></div>
+  <button id="demo" class="secondary full">Load BasicShapes example <span>→</span></button>
+  <div class="divider"></div>
+  <div class="section-title"><span>02 / PAINTED REGIONS</span><span id="region-count">—</span></div>
+  <p class="hint">Click the model or choose an area below. Matching colours stay independently selectable.</p>
+  <div id="regions" class="region-list"><div class="empty-regions">Your model’s regions will appear here.</div></div>
+  <div class="left-footer"><span class="status-dot"></span>Files and calculations stay on this computer.</div>
+ </aside>
+ <section class="viewport-shell" aria-label="3D model workspace">
+  <div class="viewport-top"><span id="view-title">Painted surface</span><div class="view-switch" aria-label="View mode"><button id="original-view" class="active">Original</button><button id="cut-view" disabled>Cut preview</button></div></div>
+  <div id="viewport"><canvas id="canvas" aria-label="Interactive 3D model. Drag to orbit, scroll to zoom, click a coloured region to select it." tabindex="0"></canvas>
+   <div id="empty-view"><div class="wire-cube">◇</div><h2>A new perspective<br>on your next print.</h2><p>Open a painted 3MF to get started.</p><button id="empty-demo" class="text-button">Try the BasicShapes example →</button></div>
+   <div id="busy" hidden><div class="spinner"></div><strong id="busy-text">Loading model…</strong><span id="cut-elapsed">Working locally</span><button id="cancel-cut" class="secondary" hidden>Cancel cut</button></div>
+  </div>
+  <div class="viewport-bottom"><span id="view-hint">DRAG TO ORBIT · SCROLL TO ZOOM · CLICK TO SELECT</span><button id="reset-view" title="Reset camera">Reset view ↺</button></div>
+  <div class="explode-row"><label for="explode">Separate preview</label><input id="explode" type="range" min="0" max="60" step="1" value="0" disabled><output id="explode-value">0 mm</output></div>
+ </section>
+ <aside class="right-panel">
+  <div class="section-title"><span>03 / EXCISION</span></div>
+  <div id="selection" class="selection"><span class="selection-dot"></span><div><strong id="selection-name">Select a painted area</strong><span id="selection-area">A single region, not every matching colour</span></div></div>
+  <section id="diagnostics" hidden>
+   <strong class="diagnostic-title">Mesh needs attention</strong>
+   <p id="diagnostic-summary" class="hint"></p>
+   <label class="check-label"><input id="show-problems" type="checkbox" checked> Highlight problem areas in red</label>
+   <p class="hint">Inspection only. Cutting stays disabled until a repair is reviewed and approved.</p>
+   <button id="repair-preview" class="secondary full">Preview proposed repair <span>→</span></button>
+   <div id="repair-review" hidden>
+    <p id="repair-summary" class="hint"></p>
+    <div class="repair-views"><button id="repair-original">Show original</button><button id="repair-proposed">Show proposal</button></div>
+    <p class="hint">Red surfaces would be removed. The grey model is the proposed solid. Your source file will not be overwritten.</p>
+    <label class="check-label"><input id="repair-consent" type="checkbox"> I approve this geometry repair and the stated colour approximations.</label>
+    <button id="repair-approve" class="primary full" disabled>Approve repair</button>
+    <button id="repair-cancel" class="text-button">Cancel · keep original</button>
+   </div>
+  </section>
+  <button id="save-repaired" class="secondary full" hidden>Save repaired 3MF <span>↓</span></button>
+  <fieldset id="border-settings" disabled>
+   <details><summary>Smooth painted junction</summary>
+    <p class="hint">Gently relaxes the selected border and nearby mesh together. Sharp corners and the flat bottom stay fixed. Whole-border editing; local brush editing will follow.</p>
+    <label for="border-amount">Maximum movement (mm)</label><input id="border-amount" type="number" min=".01" max=".5" step=".01" value=".15">
+    <label for="border-band">Surrounding band (mm)</label><input id="border-band" type="number" min=".1" max="5" step=".1" value="1">
+    <button id="border-preview" class="secondary full">Preview smoothing</button>
+    <div id="border-review" hidden><p id="border-report" class="hint"></p><button id="border-before">Before</button><button id="border-after">After</button><button id="border-apply" class="primary full">Apply smoothing</button><button id="border-cancel">Cancel</button></div>
+   </details>
+  </fieldset>
+  <button id="border-undo" class="text-button" disabled>Undo last smoothing</button>
+  <fieldset id="settings" disabled>
+   <label for="cut-method">Cut method</label><select id="cut-method"><option value="interface">Paint interface + flat cap</option><option value="planar">Planar projection</option></select>
+    <p id="method-hint" class="hint">Extrudes the painted interface outline along one insertion direction to a flat cap. Outline simplification: 0.02 mm.</p>
+    <label for="direction">Pull direction</label><select id="direction"><option value="+Z">Up · +Z</option><option value="-Z">Down · −Z</option><option value="+X">Right · +X</option><option value="-X">Left · −X</option><option value="+Y">Back · +Y</option><option value="-Y">Front · −Y</option></select>
+   <p class="hint">Choose the direction in which the part separates from the body.</p>
+   <div class="label-row"><label for="depth">Depth into base</label><span>mm</span></div><div class="tuner"><input id="depth-range" type="range" min=".1" max="10" step=".1" value="2"><input id="depth" type="number" min=".05" max="100" step=".1" value="2"></div>
+   <div id="plug-controls">
+    <label for="root-taper">Plug taper · per side (°)</label><div class="tuner"><input id="root-taper-range" type="range" min="0" max="15" step=".5" value="3"><input id="root-taper" type="number" min="0" max="15" step=".5" value="3"></div>
+    <label for="root-smoothing">Plug profile smoothing (mm)</label><input id="root-smoothing" type="number" min="0" max=".5" step=".05" value=".15">
+    <p class="hint">Taper starts at the painted seam and narrows the hidden plug towards its cap. Shared flat bottoms stay flush. Smoothing applies to the internal profile; the painted feature stays intact. Set taper to 0° for straight sides.</p>
+   </div>
+   <div id="plane-controls"><label for="plane">Base plane · signed axis position (mm)</label><div class="plane-row"><input id="plane" type="number" step=".1" value="0"><button id="auto-plane" title="Use the suggested base plane">Auto</button></div>
+   <p class="hint">The cut extends this far inward from the base plane; protrusions remain solid.</p></div>
+   <div class="divider"></div>
+   <label for="fastener">Connection</label><select id="fastener"><option value="none">Plain solid insert</option><option value="glue">Glue · paired dovetail recesses</option><option disabled>Ball / socket · later milestone</option><option disabled>Slide fit · later milestone</option></select>
+   <div id="glue-controls" hidden><p class="hint">One aligned pair of shallow recesses, wider inside than at the opening. Glue forms a butterfly-shaped key between the parts.</p>
+    <label for="glue-width">Opening width (mm)</label><input id="glue-width" type="number" min=".5" max="20" step=".1" value="3">
+    <label for="glue-length">Opening length (mm)</label><input id="glue-length" type="number" min=".5" max="20" step=".1" value="1.5">
+    <label for="glue-depth">Depth into each part (mm)</label><input id="glue-depth" type="number" min=".1" max="3" step=".1" value=".5">
+    <label for="glue-taper">Undercut angle (°)</label><input id="glue-taper" type="number" min="1" max="15" step="1" value="5">
+    <label for="glue-wall">Surrounding wall margin (mm)</label><input id="glue-wall" type="number" min=".3" max="3" step=".1" value=".6">
+   </div>
+   <details><summary>Fit allowances <span id="fit-summary">0.05 mm minimum</span></summary><label for="fit-target">Apply allowance to</label><select id="fit-target"><option value="body">Main body · enlarge cavity</option><option value="part">Excised part · reduce hidden plug</option><option value="both">Both · half on each</option></select><label for="side-clearance">Side clearance · per side (mm)</label><input id="side-clearance" type="number" min="0" max="2" step=".05" value="0"><label for="depth-clearance">Depth clearance (mm)</label><input id="depth-clearance" type="number" min="0" max="2" step=".05" value="0"><p class="hint">Zero means a 0.05 mm minimum per side and 0.05 mm extra depth. Larger values are used as entered. The chosen target receives the gap; Both splits it equally. Part-side changes affect the hidden plug. A 0.05 mm side gap is 0.1 mm across the joint.</p></details>
+   <div id="fragment-controls"><label for="fragment-width">Minimum cut-fragment width (mm)</label><input id="fragment-width" type="number" min="0" max="1" step=".05" value=".2">
+   <p class="hint">Joins small, detached body strips thinner than this to the removable part. Existing separate features are protected. Does not trim attached walls. Set 0 to disable.</p></div>
+   <button id="preview" class="primary full">Preview cut <span>→</span></button>
+  </fieldset>
+  <div id="feedback" role="status" aria-live="polite" hidden></div>
+  <section id="collision-diagnostics" hidden>
+   <strong>Insertion collision · inspection only</strong>
+   <p id="collision-summary" class="hint"></p>
+   <button id="focus-collision" class="secondary full">Zoom to largest contact</button>
+   <details><summary>Measured overlaps</summary><div id="collision-samples" class="hint"></div></details>
+  </section>
+  <details id="validation" hidden><summary>Cut Check <span class="valid-mark" aria-label="Checks passed">✓</span></summary><div id="checks"></div></details>
+  <button id="export" class="secondary full" disabled>Save export <span>↓</span></button>
+  <p class="export-note">Aligned 3MF + cut settings. Individual STLs are included when their precision checks pass. One excision per export. The exported base uses one colour; its other original paint regions are not retained yet.</p>
+ </aside>
+</main>
+<footer><span id="bottom-status">Ready to open a model</span><span>MILLIMETRES <b>·</b> <span id="connection-status">PLAIN INSERT</span></span></footer>
+<script type="module" src="/app.js"></script>
+</body></html>
