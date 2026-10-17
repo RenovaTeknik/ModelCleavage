@@ -4,7 +4,9 @@
 
 Turn painted regions of a single-mesh OrcaSlicer 3MF into separate solid parts and matching sockets for assembly after printing. Model Cleavage runs as a local web app: open a painted model, select a region, choose how it separates, and preview the cut before exporting.
 
-![Model Cleavage v0.2.0: accepted parts, assembly preview and selected export.](docs/images/model-cleavage-v020.png)
+![Model Cleavage v0.2.0: accepted parts, assembly preview and selected export.](media/model-cleavage-v020.png)
+
+[Watch the screen recording](media/Screen%20Recording%202026-10-16%20183116.mp4).
 
 This is an early working release. Geometry checks help catch invalid results, but practical fit and assembly still need inspection and print testing. See the [roadmap](ROADMAP.md) and [release notes](CHANGELOG.md).
 
