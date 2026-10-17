@@ -29,11 +29,16 @@ def run(folder):
         update('Starting cut',force=True)
         with (folder/'input.pkl').open('rb') as stream:model,params=pickle.load(stream)
         result=cut_region(model,CutParameters(**params))
+        update('Checking existing sockets',force=True)
+        from cutting_engine.assembly import check_existing_sockets,remaining_model
+        check_existing_sockets(model,result)
+        update('Preparing remaining painted body',force=True)
+        next_model=remaining_model(model,result)
         update('Preparing preview',force=True)
         def surface(solid):
             value=solid.to_mesh64()
             return np.asarray(value.vert_properties)[:,:3],np.asarray(value.tri_verts)
-        data={'parameters':asdict(result.parameters),'report':result.report,'surfaces':[surface(s) for s in [result.extracted,result.remainder,result.nominal_remainder]]}
+        data={'next_model':next_model,'parameters':asdict(result.parameters),'report':result.report,'surfaces':[surface(s) for s in [result.extracted,result.remainder,result.nominal_remainder]]}
         with (folder/'result.tmp').open('wb') as stream:pickle.dump(data,stream,pickle.HIGHEST_PROTOCOL)
         (folder/'result.tmp').replace(folder/'result.pkl')
         now=time.perf_counter();timings[current]=timings.get(current,0)+now-stage_started

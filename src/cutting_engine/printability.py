@@ -49,3 +49,50 @@ def absorb_fragments(part,fragments):
     if len(result.decompose())>len(part.decompose()):
         raise ValueError('A thin body fragment cannot join the removable part. Review the cut or disable the minimum-width filter.')
     return result,zero
+
+
+def painted_speck_bridge(part, source, selected, direction):
+    """Bounded, source-clipped escape envelopes for cut-created painted specks."""
+    from .acceleration import SurfaceDistance
+    from .engine import polygon_contours
+    from shapely.geometry import MultiPoint
+    import trimesh
+    components=part.decompose()
+    if len(components)<2:return None,[]
+    main=max(components,key=lambda c:c.volume())
+    surface=mesh(main)
+    paint=SurfaceDistance(selected)
+    n=np.asarray(direction,dtype=float)
+    reference=np.eye(3)[np.argmin(abs(n))]
+    u=np.cross(reference,n);u/=np.linalg.norm(u);v=np.cross(n,u)
+    envelopes=[];records=[]
+    for component in components:
+        volume=float(component.volume());bounds=np.asarray(component.bounding_box())
+        if component is main or not 0<volume<=.001 or max(bounds[3:]-bounds[:3])>1:continue
+        vertices=mesh(component).vertices
+        if paint(vertices).min()>.0001:continue
+        centre=vertices.mean(0)
+        closest,distance,_=trimesh.proximity.closest_point_naive(surface,centre[None,:])
+        gap=float(distance[0])
+        if gap>.5:continue
+        points=np.vstack([vertices,closest])
+        profile=MultiPoint(points@np.array([u,v]).T).convex_hull.buffer(.1,quad_segs=4)
+        bottom=float((points@n).min())-.1
+        # Signed directions require all eight bounding-box corners for the top.
+        box=np.asarray(source.bounding_box()).reshape(2,3)
+        top=float(sum(box[1,i]*n[i] if n[i]>=0 else box[0,i]*n[i] for i in range(3)))+1
+        envelope=mf.CrossSection(polygon_contours(profile),mf.FillRule.EvenOdd).extrude(top-bottom).translate([0,0,bottom])
+        envelope=envelope.transform(np.column_stack([u,v,n,np.zeros(3)]).tolist())
+        addition=(source^envelope)-part
+        if addition.volume()>.1:continue
+        joined=part+addition
+        if sum(c.volume()>.001 for c in joined.decompose())!=sum(c.volume()>.001 for c in part.decompose()):continue
+        # Require the speck's painted vertices to reach the main solid, rather
+        # than merely increasing the size of another disconnected island.
+        largest=max(joined.decompose(),key=lambda c:c.volume())
+        if abs((component-largest).volume())>1e-10:continue
+        envelopes.append(envelope)
+        records.append({'speck_volume_mm3':volume,'bridge_material_mm3':float(addition.volume()),'gap_mm':gap,'profile_guard_mm':.1,'maximum_gap_mm':.5,'maximum_material_mm3':.1})
+    if sum(r['bridge_material_mm3'] for r in records)>.2:
+        raise ValueError('Painted sliver bridges exceed the bounded repair allowance. Review the painted boundary.')
+    return (mf.Manifold.batch_boolean(envelopes,mf.OpType.Add) if envelopes else None),records

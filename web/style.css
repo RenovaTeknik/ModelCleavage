@@ -16,3 +16,5 @@
 }
 
 #validation>summary{font-size:11px;letter-spacing:1px}#validation>summary .valid-mark{color:var(--accent);font-size:15px}
+
+#parts-list{display:grid;gap:12px}.part-row{border:1px solid var(--line);border-radius:5px;padding:9px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center}.part-row input[type=text]{min-width:0;width:100%;padding:7px;font-size:11px}.part-row button{font-size:10px;background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:3px;padding:6px}.part-row label{font-size:11px;margin:0}.parts-actions{display:flex;gap:8px;margin-top:12px}.parts-actions button{font-size:10px;padding:8px;gap:4px}#accept-controls{margin-top:18px}#accept-part{margin-top:10px}#parts-panel{flex-shrink:0}.region:disabled{opacity:.5}.region:disabled .arrow{display:none}

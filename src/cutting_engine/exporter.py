@@ -1,4 +1,5 @@
 from dataclasses import asdict
+import re
 import io
 import json
 import zipfile
@@ -11,11 +12,11 @@ from . import __version__, __release_name__
 NS = 'http://schemas.microsoft.com/3dmanufacturing/core/2015/02'
 
 
-def export_bundle(model, result):
+def export_bundle(model, result, *, named_solids=None, report_override=None):
     pieces = []
     selected_state = model.regions[result.parameters.region]['state']
     base_state = int(np.bincount(model.states).argmax())
-    for name, solid, state in [('excised', result.extracted, selected_state), ('base', result.remainder, base_state)]:
+    for name, solid, state in (named_solids if named_solids is not None else [('excised', result.extracted, selected_state), ('base', result.remainder, base_state)]):
         for index, part in enumerate(solid.decompose(), 1):
             pieces.append((f'{name}-{index}', mesh(part), state))
     ET.register_namespace('', NS)
@@ -67,6 +68,7 @@ def export_bundle(model, result):
               'approved_repair': model.diagnostics.get('repair_approval'),
               'export_placement_shift_mm': shift,
               'note': 'The extracted region and base have solid colour assignments. Remaining original paint is not carried onto the base in this prototype export.'}
+    if report_override:report.update(report_override)
     stl_files = {}
     stl_checks = []
     export_warnings = []
@@ -76,7 +78,10 @@ def export_bundle(model, result):
         valid = bool(imported.is_watertight and imported.is_winding_consistent and imported.volume > 0)
         stl_checks.append({'name': name, 'closed_after_stl_conversion': valid})
         if valid:
-            stl_files[name + '.stl'] = data
+            filename=re.sub(r'[^A-Za-z0-9_.-]+','-',name).strip('.-') or 'part'
+            if named_solids is not None:filename=f'{len(stl_files)+1:03d}-{filename}'
+            if filename+'.stl' in stl_files:filename=f'{len(stl_files)+1}-{filename}'
+            stl_files[filename + '.stl'] = data
         else:
             export_warnings.append(f'{name}: STL omitted because its coordinate precision collapses small edges. Use the full-precision assembly.3mf.')
     report['stl_checks'] = stl_checks
@@ -89,5 +94,5 @@ def export_bundle(model, result):
         if export_warnings:
             z.writestr('STL export notes.txt', '\n'.join(export_warnings))
         z.writestr('cut-settings-and-validation.json', json.dumps(report, indent=2))
-        z.writestr('READ ME.txt', 'Assembly retains relative part positions. STL files use the same model coordinates. Side clearance is per side on the pocket; depth clearance adds pocket depth. The part stays nominal.\nOnly None fastening is implemented. Directional cuts may change side colour boundaries; review before printing. Remaining original paint is not retained on the base export.\n')
+        z.writestr('READ ME.txt', 'Assembly retains relative part positions. STL files use the same model coordinates. Only the selected accepted parts and/or remaining body are included. See the JSON report for each cut and its fit allocation. Plain inserts and optional glue keys are supported. Review before printing. Remaining original paint is not retained on the base export.\n')
     return bundle.getvalue()

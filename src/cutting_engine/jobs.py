@@ -51,4 +51,6 @@ class CutJob:
                 raise ValueError('The preview failed its full-precision volume transfer check. No export was created.')
         (self.folder/'input.pkl').unlink(missing_ok=True)
         (self.folder/'result.pkl').unlink(missing_ok=True)
-        return CutResult(CutParameters(**data['parameters']),*surfaces,data['report'])
+        result=CutResult(CutParameters(**data['parameters']),*surfaces,data['report'])
+        result.next_model=data.get('next_model')
+        return result

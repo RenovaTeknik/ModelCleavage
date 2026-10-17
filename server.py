@@ -79,7 +79,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             self.local_request()
             action = urlparse(self.path).path
-            if action not in ['/api/load', '/api/demo', '/api/region', '/api/preview', '/api/export', '/api/repair-preview', '/api/repair-approve', '/api/repair-cancel', '/api/repair-export', '/api/job-status', '/api/job-cancel', '/api/smooth-preview', '/api/smooth-apply', '/api/smooth-cancel', '/api/smooth-undo']:
+            if action not in ['/api/load', '/api/demo', '/api/region', '/api/preview', '/api/export', '/api/repair-preview', '/api/repair-approve', '/api/repair-cancel', '/api/repair-export', '/api/job-status', '/api/job-cancel', '/api/smooth-preview', '/api/smooth-apply', '/api/smooth-cancel', '/api/smooth-undo', '/api/parts/accept', '/api/parts/undo', '/api/parts/reset', '/api/parts/rename', '/api/parts/export']:
                 return self.respond({'error': 'Unknown action.'}, 404)
             with LOCK:
                 if action in ['/api/load', '/api/demo']:
@@ -95,7 +95,7 @@ class Handler(BaseHTTPRequestHandler):
                         data = self.body()
                         name = Path(unquote(self.headers.get('X-File-Name', 'model.3mf'))).name
                     model = load_3mf(data, name)
-                    STATE.update(smooth=None, undo=[])
+                    STATE.update(smooth=None, undo=[], assembly=None)
                     STATE.update(model=model, model_id=uuid.uuid4().hex, result=None, result_id=None, repair=None, repair_id=None)
                     payload = model.payload()
                     payload['model_id'] = STATE['model_id']
@@ -104,6 +104,33 @@ class Handler(BaseHTTPRequestHandler):
                 if STATE['model'] is None or params.get('model_id') != STATE['model_id']:
                     raise ValueError('The model changed. Load it again before continuing.')
                 model = STATE['model']
+                assembly=STATE.get('assembly')
+                if action.startswith('/api/parts/'):
+                    from cutting_engine.assembly import Assembly
+                    if action=='/api/parts/accept':
+                        if params.get('result_id')!=STATE['result_id'] or STATE['result'] is None:raise ValueError('Preview the current cut before adding it.')
+                        assembly=assembly or Assembly(model)
+                        assembly.accept(STATE['result'],params.get('name',''))
+                        STATE['assembly']=assembly
+                    else:
+                        if assembly is None:raise ValueError('Add a part first.')
+                        if params.get('revision')!=assembly.revision:raise ValueError('The parts changed. Refresh the parts list before continuing.')
+                        if action=='/api/parts/export':
+                            bundle=assembly.export(params.get('selected'))
+                            stem=datetime.datetime.now().strftime('parts-%Y%m%d-%H%M%S-')+uuid.uuid4().hex[:6]
+                            destination=ROOT/'output'/stem;destination.mkdir(parents=True)
+                            filename='Model-Cleavage-parts.zip';(destination/filename).write_bytes(bundle)
+                            with zipfile.ZipFile(io.BytesIO(bundle)) as archive:warnings=json.loads(archive.read('cut-settings-and-validation.json')).get('export_warnings',[])
+                            return self.respond({'url':f'/exports/{stem}/{filename}','folder':str(destination),'filename':filename,'warnings':warnings})
+                        if action=='/api/parts/undo':assembly.undo()
+                        elif action=='/api/parts/reset':assembly.reset()
+                        elif action=='/api/parts/rename':assembly.rename(params.get('id'),params.get('name',''))
+                    if STATE.get('job') is not None:STATE['job'].cancel()
+                    STATE.update(model=assembly.model,model_id=uuid.uuid4().hex,result=None,result_id=None,job=None,smooth=None,repair=None,repair_id=None,undo=[])
+                    payload=assembly.payload();payload['model_id']=STATE['model_id']
+                    return self.respond(payload)
+                if assembly is not None and assembly.parts and (action.startswith('/api/smooth-') or action.startswith('/api/repair-')):
+                    raise ValueError('Reset accepted cuts before repairing or smoothing the source mesh.')
                 if action.startswith('/api/smooth-'):
                     if STATE.get('job') is not None:
                         STATE['job'].cancel(); STATE['job']=None
@@ -131,7 +158,7 @@ class Handler(BaseHTTPRequestHandler):
                     else:
                         if not STATE.get('undo'):raise ValueError('There is no smoothing edit to undo.')
                         model=STATE['undo'].pop()
-                    STATE.update(model=model,model_id=uuid.uuid4().hex,result=None,result_id=None,smooth=None,repair=None,repair_id=None)
+                    STATE.update(model=model,model_id=uuid.uuid4().hex,result=None,result_id=None,smooth=None,repair=None,repair_id=None,assembly=None)
                     payload=model.payload();payload.update(model_id=STATE['model_id'],can_undo=bool(STATE.get('undo')))
                     return self.respond(payload)
                 if action in ['/api/job-status','/api/job-cancel']:
@@ -164,7 +191,7 @@ class Handler(BaseHTTPRequestHandler):
                         raise ValueError('Explicit approval of the current repair preview is required.')
                     repaired = STATE['repair'].candidate
                     repaired.diagnostics['repair_approval'] = {'approved': True, 'report': STATE['repair'].report}
-                    STATE.update(model=repaired, model_id=uuid.uuid4().hex, result=None, result_id=None, repair=None, repair_id=None, smooth=None, undo=[])
+                    STATE.update(model=repaired, model_id=uuid.uuid4().hex, result=None, result_id=None, repair=None, repair_id=None, smooth=None, undo=[], assembly=None)
                     payload = repaired.payload()
                     payload['model_id'] = STATE['model_id']
                     return self.respond(payload)
@@ -178,6 +205,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.respond({'url': f'/exports/{stem}/{filename}', 'folder': str(destination), 'filename': filename})
                 if action == '/api/region':
                     region = int(params['region'])
+                    if 0<=region<len(model.regions) and model.regions[region].get('blocked'):raise ValueError(model.regions[region].get('reason','This region is not available.'))
                     if not 0 <= region < len(model.regions):
                         raise ValueError('Invalid region.')
                     if params.get('direction'):
@@ -189,6 +217,8 @@ class Handler(BaseHTTPRequestHandler):
                         return self.respond({'direction':direction,'plane':0.0})
                     return self.respond(model.suggestion(region))
                 if action == '/api/preview':
+                    region=int(params['region'])
+                    if not 0<=region<len(model.regions) or model.regions[region].get('blocked'):raise ValueError('This region is unavailable or was changed by an earlier cut. Undo cuts to use it intact.')
                     STATE.update(result=None, result_id=None)
                     cut = CutParameters(region=int(params['region']), direction=str(params['direction']),
                                         plane=float(params['plane']), depth=float(params['depth']),

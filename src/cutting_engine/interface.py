@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.spatial import cKDTree
 from .progress import report
+from .model import triangle_normals
 
 
 def paint_boundary(triangles):
@@ -22,7 +23,10 @@ def paint_boundary(triangles):
         ids=ids[np.argsort((vertices[ids]-start)@delta)]
         pieces.extend([tuple(sorted((int(x),int(y)))) for x,y in zip(ids[:-1],ids[1:]) for _ in range(int(count)) if x!=y])
     unique,counts=np.unique(pieces,axis=0,return_counts=True)
-    boundary=unique[counts==1]
+    # Subdivided/overlapping paint can contribute the same segment more
+    # than twice. Paired incidences cancel; every odd remainder is boundary.
+    # Keeping only count==1 drops triple incidences and invents open gaps.
+    boundary=unique[counts%2==1]
     return vertices,boundary
 
 
@@ -113,8 +117,8 @@ def interface_sweep(selected, n, depth, surrounding=None, side_gap=0, taper_degr
         bottom_z=float(min(selected[:,:,2].min(),surrounding[:,:,2].min()))
         import trimesh
         coplanar_tolerance=.005
-        selected_flat=(np.max(np.abs(selected[:,:,2]-bottom_z),axis=1)<=coplanar_tolerance)&(trimesh.triangles.normals(selected)[0][:,2]<-.995)
-        body_flat=(np.max(np.abs(surrounding[:,:,2]-bottom_z),axis=1)<=coplanar_tolerance)&(trimesh.triangles.normals(surrounding)[0][:,2]<-.995)
+        selected_flat=(np.max(np.abs(selected[:,:,2]-bottom_z),axis=1)<=coplanar_tolerance)&(triangle_normals(selected)[:,2]<-.995)
+        body_flat=(np.max(np.abs(surrounding[:,:,2]-bottom_z),axis=1)<=coplanar_tolerance)&(triangle_normals(surrounding)[:,2]<-.995)
         if trimesh.triangles.area(selected[selected_flat]).sum()>.01 and trimesh.triangles.area(surrounding[body_flat]).sum()>.01:
             axis=np.array([u[2],v[2]])
             c=float((np.vstack(polygon_contours(interface_profile))@axis).min())

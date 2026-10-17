@@ -1,14 +1,20 @@
 # Model Cleavage
 
-**v0.1.0 — First Cut**
+**v0.2.0 — Multiple Parts**
 
 Turn painted regions of a single-mesh OrcaSlicer 3MF into separate solid parts and matching sockets for assembly after printing. Model Cleavage runs as a local web app: open a painted model, select a region, choose how it separates, and preview the cut before exporting.
 
-![Model Cleavage: painted model, selectable regions and cut settings.](docs/images/model-cleavage-v010.png)
+![Model Cleavage v0.2.0: accepted parts, assembly preview and selected export.](docs/images/model-cleavage-v020.png)
 
 This is an early working release. Geometry checks help catch invalid results, but practical fit and assembly still need inspection and print testing. See the [roadmap](ROADMAP.md) and [release notes](CHANGELOG.md).
 
-## What First Cut can do
+## Multiple-part workflow
+
+Version 0.2.0 adds multiple accepted cuts. After inspecting a preview, choose **Add part**, give it a name, then select another intact painted area on the remaining body. Use the Parts list to hide parts or choose which parts and remaining body to export. **Undo last cut** restores the previous body; **Reset cuts** restores the loaded model.
+
+Accepted cuts live only in the running session. Restarting or opening another model clears them. Repair and paint-border edits must be completed before accepting cuts. Regions changed by an earlier cut are unavailable, and cuts that damage an existing socket are rejected. Arbitrary earlier-cut reversal and project save/load are still pending.
+
+## Cutting and repair features
 
 - Reconstruct Orca/Prusa TriangleSelector paint regions and select individual areas in a 3D viewer.
 - Excise complete solid parts using an interface-following directional cut and a flat internal mating cap.
@@ -53,9 +59,10 @@ Choose **Load BasicShapes example**, or open [examples/BasicShapes001.3mf](examp
 2. Choose the pull direction and depth into the base. The default depth is 2 mm; the selected protrusion remains a complete solid.
 3. Adjust plug taper, internal profile smoothing and fit allowances. The alternate planar cutting mode exposes a base-plane control.
 4. Choose **Preview cut**. Move **Separate preview** to inspect the plug and socket. Expand **Cut Check** to review validation and piece counts.
-5. Choose **Save export**. The app saves a ZIP in `output/` and starts a browser download of the same bundle.
+5. Choose **Add part** to accept the preview and name it. Select another intact region and repeat.
+6. Tick the accepted parts and/or remaining body to include, then choose **Export selected**. The app saves a ZIP in `output/` and starts a browser download. **Save export** also supports a standalone preview before accepting any parts.
 
-Changing the selection or cut settings invalidates the old preview and disables export until another preview succeeds. Exported assemblies contain multiple meshes and are intended for a slicer such as OrcaSlicer; the current input loader accepts single-mesh source projects.
+Changing the selection or cut settings invalidates the pending preview. Accepted parts remain available for export. Exported assemblies contain multiple meshes and are intended for a slicer such as OrcaSlicer; the current input loader accepts single-mesh source projects.
 
 ### Fit allowances
 
@@ -69,9 +76,9 @@ For example, 0.2 mm side clearance adds 0.4 mm across a socket when assigned ent
 
 ## Current limits
 
-- One mesh instance in millimetres, one excision per export, and six axis-aligned pull directions.
+- One mesh instance in millimetres, several accepted excisions per export, and six axis-aligned pull directions.
 - The exported part and base have solid filament assignments. Other original paint regions on the remaining base are not preserved yet.
-- Ball/socket and slide-fit connectors, multiple cuts, named parts, project save/load, selective export and section views are planned.
+- Ball/socket and slide-fit connectors, project save/load, arbitrary earlier-cut reversal and section views are planned.
 - Border smoothing adjusts existing mesh vertices; it is not an adaptive remeshing or sculpting tool.
 - Cleanup is bounded. Some numerical skins and detached fragments can be corrected, but this is not a general minimum-wall-thickness guarantee. Invalid or unsuitable cuts can still be rejected.
 - Closed solids and a checked directional withdrawal path do not establish real-world strength, adhesive retention, printer fit or print orientation. Inspect the mating surfaces before printing.
@@ -86,7 +93,7 @@ With the Python environment configured:
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-The release passed **63 Python tests** on the development installation, plus browser workflow checks and separate seven-degree ear/tail/foot and starter-feature checks. Private organic models and generated investigation files are not bundled. `tests/check_starter_regions.py` is a slower optional starter audit.
+Version 0.2.0 passed **73 Python tests** on the development installation, a browser check covering two accepted cuts, names, visibility, selected export, undo/reset and stale-request rejection, plus real BasicShapes sequential cuts and private Remy two-ear cut/add/export checks. These are software checks, not physical print validation. Private organic models and generated investigation files are not bundled. `tests/check_starter_regions.py` is a slower optional starter audit.
 
 Optional browser tests need a running local server and Playwright:
 
@@ -96,6 +103,7 @@ npx playwright install chromium
 npm run test:browser
 npm run test:layout
 npm run test:seam
+npm run test:assembly
 ```
 
 `MODEL_CLEAVAGE_BROWSER` can point to a browser executable. A private-model repair regression is skipped unless `MODEL_CLEAVAGE_REPAIR_SAMPLE` is set to its original test input; that model is not distributed. Browser checks operate on the app's active session, so run them when no user cut is in progress.

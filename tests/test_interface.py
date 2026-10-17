@@ -6,6 +6,16 @@ import manifold3d as mf
 from cutting_engine.engine import cut_region,CutParameters,mesh
 from cutting_engine.model import PaintedModel
 class InterfaceTests(unittest.TestCase):
+    def test_repeated_paint_edge_keeps_boundary_closed(self):
+        from cutting_engine.interface import paint_boundary
+        a=[0.,0.,0.];b=[1.,0.,0.]
+        triangles=np.array([[a,b,[0.,1.,0.]],[b,a,[0.,-1.,0.]],[a,b,[0.,0.,1.]]])
+        vertices,edges=paint_boundary(triangles)
+        degree=np.bincount(edges.ravel(),minlength=len(vertices))
+        self.assertTrue(np.all(degree%2==0))
+        ids=[int(np.flatnonzero(np.all(vertices==p,axis=1))[0]) for p in [a,b]]
+        self.assertTrue(np.any(np.all(edges==sorted(ids),axis=1)))
+
     @classmethod
     def setUpClass(cls):
         source=mesh(mf.Manifold.sphere(5,24))

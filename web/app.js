@@ -15,6 +15,7 @@ const root = new THREE.Group(); scene.add(root);
 scene.add(new THREE.HemisphereLight(0xe5f0e6, 0x44505b, 2.1));
 const key = new THREE.DirectionalLight(0xffffff, 2.2); key.position.set(-100, -170, 260); scene.add(key);
 const fill = new THREE.DirectionalLight(0xb6d4df, .8); fill.position.set(180, 100, 70); scene.add(fill);
+let bodyBacking;let acceptedMeshes=[];const exportSelection=new Set();const hiddenParts=new Set();
 let originalMesh, highlight, baseMesh, partMesh, grid, arrow, collisionMesh, collisionBox;
 let problemMesh, repairMesh, removedMesh, repairProposal;
 
@@ -60,8 +61,19 @@ function notice(message, error = false) {
   $('feedback').classList.toggle('error', error);
   $('feedback').textContent = message || '';
 }
+function acceptedParts(){return app.model?.assembly?.parts || [];}
+function canExport(){return acceptedParts().length ? exportSelection.size>0 : !!app.result;}
+function syncExport(){
+  $('export').disabled=app.busy || !canExport();
+  $('accept-part').disabled=app.busy || !app.result;
+  $('accept-controls').hidden=!app.result;
+  $('export').firstChild.textContent=acceptedParts().length?'Export selected ':'Save export ';
+  updateFooterStatus();
+}
 function updateFooterStatus() {
-  if (!$('export').disabled && app.result) {
+  if (!$('export').disabled && acceptedParts().length) {
+    $('bottom-status').textContent = `${exportSelection.size} accepted item(s) selected for export`;
+  } else if (!$('export').disabled && app.result) {
     $('bottom-status').textContent = 'Preview ready · move Separate preview to inspect the solid part and recess';
   } else if (app.collision) {
     $('bottom-status').textContent = 'Collision inspection only · red shows intersection · no printable export';
@@ -73,15 +85,17 @@ function updateFooterStatus() {
   }
 }
 function busy(active, text = 'Working…') {
-  $('border-settings').disabled=active || app.selected===null || !app.model?.cut_ready || !!app.borderProposal;
+  $('border-settings').disabled=active || acceptedParts().length>0 || app.selected===null || !app.model?.cut_ready || !!app.borderProposal;
   $('border-undo').disabled=active || !app.model?.can_undo || !!app.borderProposal;
   app.busy = active; $('busy').hidden = !active; $('busy-text').textContent = text;
   $('open-file').disabled = active; $('demo').disabled = active; $('empty-demo').disabled = active;
   $('settings').disabled = active || app.selected === null || !app.model?.cut_ready || !!app.borderProposal;
-  $('export').disabled = active || !app.result;
-  updateFooterStatus();
+  syncExport();
+  $('undo-cut').disabled=active || !acceptedParts().length;
+  $('reset-cuts').disabled=active || !acceptedParts().length;
+  document.querySelectorAll('#parts-list input,#parts-list button').forEach(e=>e.disabled=active);
   $('save-repaired').disabled = active;
-  document.querySelectorAll('.region').forEach(b => b.disabled = active);
+  document.querySelectorAll('.region').forEach(b => b.disabled = active || b.dataset.blocked==='true');
   $('repair-preview').disabled = active;
   $('repair-approve').disabled = active || !$('repair-consent').checked || !repairProposal;
 }
@@ -98,8 +112,8 @@ function clearPreview() {
   dispose(collisionMesh); dispose(collisionBox); collisionMesh=collisionBox=null; app.collision=null;
   $('collision-diagnostics').hidden=true; $('cut-view').textContent='Cut preview';
   dispose(baseMesh); dispose(partMesh); baseMesh = partMesh = null;
-  app.result = null; $('cut-view').disabled = true; $('export').disabled = true;
-  $('validation').hidden = true; $('validation').open = false; updateFooterStatus(); $('explode').disabled = true; $('explode').value = '0'; $('explode-value').textContent = '0 mm';
+  app.result = null; $('cut-view').disabled = true; syncExport();
+  $('validation').hidden = true; $('validation').open = false; updateFooterStatus(); for(const m of acceptedMeshes)m.position.set(0,0,0); $('explode').disabled = !acceptedParts().length; $('explode').value = '0'; $('explode-value').textContent = '0 mm';
   setMode('original');
 }
 function invalidate() {
@@ -110,17 +124,19 @@ function setMode(mode) {
   if (mode === 'cut' && !app.result) return;
   if (mode === 'original' && repairProposal) showRepairProposal(false);
   app.mode = mode;
-  if (originalMesh) originalMesh.visible = mode === 'original';
+  if (originalMesh) originalMesh.visible = mode === 'original' && !hiddenParts.has('body');
+  if (bodyBacking) bodyBacking.visible=mode==='original' && !hiddenParts.has('body');
   if (highlight) highlight.visible = mode === 'original';
-  if (baseMesh) baseMesh.visible = mode !== 'original';
+  if (baseMesh) baseMesh.visible = mode !== 'original' && !hiddenParts.has('body');
   if (collisionMesh) collisionMesh.visible=mode==='collision';
   if (collisionBox) collisionBox.visible=mode==='collision';
   if (partMesh) partMesh.visible = mode !== 'original';
   if (arrow) arrow.visible = mode === 'original';
   $('original-view').classList.toggle('active', mode === 'original'); $('cut-view').classList.toggle('active', mode !== 'original');
-  $('view-title').textContent = mode === 'cut' ? 'Solid part + matching pocket' : 'Painted surface';
+  $('view-title').textContent = mode === 'cut' ? 'Solid part + matching pocket' : acceptedParts().length ? 'Remaining body + accepted parts' : 'Painted surface';
+  $('original-view').textContent=acceptedParts().length?'Assembly':'Original';
   if (mode==='collision') $('view-title').textContent=`Collision at ${app.collision.at_offset_mm.toFixed(3)} mm travel · red is overlap`;
-  $('explode').disabled = mode !== 'cut';
+  $('explode').disabled = mode==='collision' || (mode!=='cut'&&!acceptedParts().length);
 }
 function resetCamera() {
   if (!app.model) { camera.position.set(150, -100, 140); controls.target.set(0, 0, 0); }
@@ -143,23 +159,24 @@ resetCamera(); resize(); frame();
 function regionLabel(region) { return `Filament ${region.state} · area ${region.id + 1}`; }
 function showRegions() {
   $('regions').replaceChildren();
-  for (const region of app.model.regions) {
-    const button = document.createElement('button'); button.className = 'region'; button.dataset.region = region.id;
+  for (const region of app.model.regions.filter(r=>!r.hidden)) {
+    const button = document.createElement('button'); button.className = 'region'; button.dataset.region = region.id;button.dataset.blocked=String(!!region.blocked);button.disabled=!!region.blocked;button.title=region.reason || '';
     const swatch = document.createElement('span'); swatch.className = 'swatch'; swatch.style.background = app.model.palette[region.state - 1];
     const text = document.createElement('span'); const label = document.createElement('span'); label.textContent = regionLabel(region);
-    const area = document.createElement('small'); area.textContent = `${region.area.toLocaleString(undefined, { maximumFractionDigits: 1 })} mm²`;
+    const area = document.createElement('small'); area.textContent = region.blocked ? (region.accepted?'Already added as a part':'Changed by earlier cut') : `${region.area.toLocaleString(undefined, { maximumFractionDigits: 1 })} mm²`;
     text.append(label, area); const next = document.createElement('span'); next.className = 'arrow'; next.textContent = '↗';
     button.append(swatch, text, next); button.addEventListener('click', () => selectRegion(region.id)); $('regions').append(button);
   }
   const grouped = app.model.regions.reduce((sum, r) => sum + (r.grouped_islands || 0), 0);
-  $('region-count').textContent = app.model.regions.length;
+  $('region-count').textContent = app.model.regions.filter(r=>!r.hidden&&!r.blocked).length;
   $('model-stats').title = grouped ? `${grouped} tiny islands grouped with nearby larger regions of the same colour (up to 0.5 mm², within 0.5 mm). Paint is unchanged.` : '';
   if (grouped) $('model-stats').textContent += ` · ${grouped} tiny islands grouped`;
 }
 function mountModel(model) {
   dispose(borderLines); borderLines=null; app.borderProposal=null; $('border-review').hidden=true; $('border-settings').disabled=true; $('border-preview').disabled=false; $('border-amount').disabled=$('border-band').disabled=false;
   clearRepairView();
-  for (const object of [originalMesh, highlight, baseMesh, partMesh, arrow, grid]) dispose(object);
+  for (const object of [originalMesh, highlight, baseMesh, partMesh, arrow, grid,bodyBacking,...acceptedMeshes]) dispose(object);
+  bodyBacking=null;acceptedMeshes=[];
   originalMesh = highlight = baseMesh = partMesh = arrow = grid = null;
   app.model = model; app.selected = null; app.result = null;
   model.positions = typed(model.positions); model.states = typed(model.states, Uint32Array); model.region_ids = typed(model.region_ids, Uint32Array);
@@ -170,7 +187,9 @@ function mountModel(model) {
     for (let vertex = 0; vertex < 3; vertex++) colours.set([c.r, c.g, c.b], i * 9 + vertex * 3);
   }
   g.setAttribute('color', new THREE.BufferAttribute(colours, 3));
-  originalMesh = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .83, metalness: .02 })); root.add(originalMesh);
+  originalMesh = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .83, metalness: .02,polygonOffset:!!model.body_positions,polygonOffsetFactor:-1,polygonOffsetUnits:-1 })); root.add(originalMesh);
+  if(model.body_positions){bodyBacking=plainMesh(typed(model.body_positions),model.palette[model.regions[0].state-1]);root.add(bodyBacking);}
+  renderParts();
   const low = new THREE.Vector3().fromArray(model.bounds[0]), high = new THREE.Vector3().fromArray(model.bounds[1]);
   const centre = low.clone().add(high).multiplyScalar(.5); root.position.copy(centre).negate();
   const span = Math.max(...high.clone().sub(low).toArray());
@@ -197,7 +216,7 @@ async function load(file = null) {
   busy(true, 'Decoding painted regions…'); notice('');
   try {
     const payload = file ? await request('/api/load', file, { headers: { 'Content-Type': 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name) } }) : await request('/api/demo', {});
-    mountModel(payload);
+    exportSelection.clear();hiddenParts.clear();mountModel(payload);
   } catch (error) { notice(error.message, true); }
   finally { busy(false); }
 }
@@ -212,6 +231,8 @@ function updateArrow() {
   arrow = new THREE.ArrowHelper(n, point, 22, 0xb8ed92, 4, 2); root.add(arrow); arrow.visible = app.mode === 'original';
 }
 async function selectRegion(id) {
+  if(app.model?.regions[id]?.blocked)return notice(app.model.regions[id].reason,true);
+  $('part-name').value=`Part ${acceptedParts().length+1}`;
   if (app.busy || !app.model) return;
   const version = ++app.selectionVersion;
   if (app.borderProposal) { notice('Apply or cancel the smoothing preview before selecting another area.'); return; }
@@ -278,10 +299,10 @@ async function preview() {
     const thinLines=thinCount ? [`✓ ${thinCount} thin cut fragment(s) joined to part · ${report.thin_fragment_filter.minimum_width_mm} mm width limit`] : [];
     const cleanupLines = corrections.length ? [`${corrections.length} microscopic defects corrected automatically`, `${(report.source_cleanup_absolute_mm3 || 0).toFixed(6)} mm³ source cleanup; original file unchanged`] : [];
     $('checks').replaceChildren();
-    for (const line of ['✓ Closed solids', '✓ Nominal shape checked before fit and relief', '✓ No significant overlap', ...interfaceLines, ...fitLines, ...timingLines, ...cleanupLines, ...thinLines, ...(report.glue_keys?.enabled ? ['✓ Paired undercut glue pockets · surrounding material checked'] : []), `${report.part_pieces} removable piece(s) · ${report.base_pieces} base piece(s)`, `${report.part_volume_mm3.toFixed(1)} mm³ removable volume`, ...(report.fit_gap_volume_mm3 > .001 ? [`${report.fit_gap_volume_mm3.toFixed(2)} mm³ intentional fit gap`] : [])]) {
+    for (const line of ['✓ Closed solids', '✓ Nominal shape checked before fit and relief', '✓ No significant overlap', ...interfaceLines, ...fitLines, ...(report.existing_socket_check?.socket_count ? [`✓ ${report.existing_socket_check.socket_count} existing socket(s) retained`] : []), ...timingLines, ...cleanupLines, ...thinLines, ...(report.glue_keys?.enabled ? ['✓ Paired undercut glue pockets · surrounding material checked'] : []), `${report.part_pieces} removable piece(s) · ${report.base_pieces} base piece(s)`, `${report.part_volume_mm3.toFixed(1)} mm³ removable volume`, ...(report.fit_gap_volume_mm3 > .001 ? [`${report.fit_gap_volume_mm3.toFixed(2)} mm³ intentional fit gap`] : [])]) {
       const row = document.createElement('div'); row.textContent = line; $('checks').append(row);
     }
-    $('validation').hidden = false;
+    $('validation').hidden = false;syncExport();
     notice(report.warnings.join(' '));
     updateFooterStatus();
   } catch (error) { notice(error.message, !app.cutSession?.cancelRequested); }
@@ -305,12 +326,13 @@ for (const id of ['side-clearance', 'depth-clearance']) $(id).oninput = () => {
 $('explode').oninput = () => {
   const value = Number($('explode').value); $('explode-value').textContent = `${value} mm`;
   if (partMesh && app.result) partMesh.position.fromArray(app.result.direction).multiplyScalar(value);
+  for(const m of acceptedMeshes)m.position.fromArray(m.userData.direction).multiplyScalar(value);
 };
 $('export').onclick = async () => {
-  if (!app.result || app.busy) return;
+  if (!canExport() || app.busy) return;
   busy(true, 'Saving printable parts…');
   try {
-    const saved = await request('/api/export', { model_id: app.model.model_id, result_id: app.result.result_id });
+    const saved = acceptedParts().length ? await request('/api/parts/export',{model_id:app.model.model_id,revision:app.model.assembly.revision,selected:[...exportSelection]}) : await request('/api/export', { model_id: app.model.model_id, result_id: app.result.result_id });
     const a = document.createElement('a'); a.href = saved.url; a.download = saved.filename; a.click();
     notice(`Saved to ${saved.folder}. A download of the same ZIP has also started. ${(saved.warnings || []).join(' ')}`);
   } catch (error) { notice(error.message, true); }
@@ -323,7 +345,10 @@ $('canvas').addEventListener('pointerup', event => {
   const rect = $('canvas').getBoundingClientRect();
   raycaster.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1), camera);
   const hit = raycaster.intersectObject(originalMesh, false)[0];
-  if (hit) selectRegion(app.model.region_ids[hit.faceIndex]);
+  if (hit && originalMesh.visible) {
+    const blocking=raycaster.intersectObjects([bodyBacking,...acceptedMeshes].filter(m=>m?.visible),false)[0];
+    if(!blocking || blocking.distance>=hit.distance-.0001)selectRegion(app.model.region_ids[hit.faceIndex]);
+  }
 });
 window.addEventListener('error', event => notice(`Interface error: ${event.message}`, true));
 
@@ -487,3 +512,40 @@ const previousMethodChange=$('cut-method').onchange;
 $('cut-method').onchange=()=>{updateGlueControls();previousMethodChange();};
 
 $('fit-target').onchange=invalidate;
+
+function renderParts(){
+  const assembly=app.model?.assembly;
+  $('parts-panel').hidden=!assembly?.parts.length;
+  $('parts-count').textContent=assembly?.parts.length || 0;
+  $('parts-list').replaceChildren();
+  const valid=new Set(['body',...acceptedParts().map(p=>p.id)]);
+  for(const id of [...exportSelection])if(!valid.has(id))exportSelection.delete(id);
+  for(const item of [...acceptedParts(),...(acceptedParts().length?[{id:'body',name:assembly.body_name}]:[])]){
+    const row=document.createElement('div');row.className='part-row';row.dataset.part=item.id;
+    const check=document.createElement('input');check.type='checkbox';check.checked=exportSelection.has(item.id);check.setAttribute('aria-label',`Export ${item.name}`);
+    check.onchange=()=>{check.checked?exportSelection.add(item.id):exportSelection.delete(item.id);syncExport();};
+    const name=document.createElement('input');name.type='text';name.maxLength=80;name.value=item.name;name.setAttribute('aria-label',`Name ${item.name}`);
+    name.onchange=()=>assemblyAction('rename',{id:item.id,name:name.value});
+    const visibility=document.createElement('button');visibility.textContent=hiddenParts.has(item.id)?'Show':'Hide';visibility.setAttribute('aria-label',`Toggle visibility of ${item.name}`);
+    visibility.onclick=()=>{hiddenParts.has(item.id)?hiddenParts.delete(item.id):hiddenParts.add(item.id);for(const m of acceptedMeshes)if(m.userData.partId===item.id)m.visible=!hiddenParts.has(item.id);if(item.id==='body'){if(originalMesh)originalMesh.visible=!hiddenParts.has('body')&&app.mode==='original';if(bodyBacking)bodyBacking.visible=!hiddenParts.has('body')&&app.mode==='original';if(baseMesh)baseMesh.visible=!hiddenParts.has('body')&&app.mode!=='original';}visibility.textContent=hiddenParts.has(item.id)?'Show':'Hide';};
+    row.append(check,name,visibility);$('parts-list').append(row);
+    if(item.positions){const m=plainMesh(typed(item.positions),app.model.palette[item.state-1]);m.userData.partId=item.id;m.userData.direction=item.direction;m.visible=!hiddenParts.has(item.id);root.add(m);acceptedMeshes.push(m);}
+  }
+}
+async function assemblyAction(action,params={}){
+  if(app.busy)return;
+  busy(true,action==='accept'?'Adding part and preparing remaining body…':'Updating parts…');
+  try{
+    const before=new Set(acceptedParts().map(p=>p.id));
+    const payload=await request(`/api/parts/${action}`,{model_id:app.model.model_id,result_id:app.result?.result_id,revision:app.model.assembly?.revision,...params});
+    if(!payload.assembly.parts.length){exportSelection.clear();hiddenParts.clear();}
+    for(const part of payload.assembly.parts)if(!before.has(part.id))exportSelection.add(part.id);
+    if(payload.assembly.parts.length&&!acceptedParts().length)exportSelection.add('body');
+    const cameraPosition=camera.position.clone(),target=controls.target.clone();
+    mountModel(payload);camera.position.copy(cameraPosition);controls.target.copy(target);controls.update();
+    notice(action==='accept'?'Part added. Select another intact painted area, or export the selected parts.':action==='undo'?'Last cut undone.':action==='reset'?'All cuts reset to the working source.':'Part renamed.');
+  }catch(e){notice(e.message,true);}finally{busy(false);}
+}
+$('accept-part').onclick=()=>assemblyAction('accept',{name:$('part-name').value});
+$('undo-cut').onclick=()=>assemblyAction('undo');
+$('reset-cuts').onclick=()=>assemblyAction('reset');

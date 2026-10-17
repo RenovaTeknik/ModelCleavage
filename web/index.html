@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Model Cleavage v0.1.0 · First Cut</title>
+<title>Model Cleavage v0.2.0 · Multiple Parts</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='8' fill='%23181d1f'/%3E%3Ctext x='20' y='29' text-anchor='middle' font-size='32' fill='%23b8ed92'%3E%E2%97%88%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="/style.css">
 <script type="importmap">{"imports":{"three":"/vendor/three.module.js"}}</script>
@@ -15,7 +15,7 @@
 </header>
 <main>
  <aside class="left-panel">
-  <div class="section-title"><span>01 / SOURCE</span><span class="chip" title="First Cut">v0.1.0 · First Cut</span></div>
+  <div class="section-title"><span>01 / SOURCE</span><span class="chip" title="Multiple Parts">v0.2.0 · Multiple Parts</span></div>
   <h1>From paint<br>to parts.</h1>
   <p class="intro">Pick a painted area. Define its cut.<br>Make it a separate solid.</p>
   <div class="source-card"><span class="small-label">CURRENT MODEL</span><strong id="model-name">No model loaded</strong><span id="model-stats">Single-mesh OrcaSlicer projects</span></div>
@@ -24,6 +24,12 @@
   <div class="section-title"><span>02 / PAINTED REGIONS</span><span id="region-count">—</span></div>
   <p class="hint">Click the model or choose an area below. Matching colours stay independently selectable.</p>
   <div id="regions" class="region-list"><div class="empty-regions">Your model’s regions will appear here.</div></div>
+  <section id="parts-panel" hidden aria-label="Accepted parts">
+   <div class="divider"></div><div class="section-title"><span>PARTS</span><span id="parts-count">0</span></div>
+   <p class="hint">Tick items to export. Added parts keep their original alignment.</p>
+   <div id="parts-list"></div>
+   <div class="parts-actions"><button id="undo-cut" class="secondary">Undo last cut</button><button id="reset-cuts" class="secondary">Reset cuts</button></div>
+  </section>
   <div class="left-footer"><span class="status-dot"></span>Files and calculations stay on this computer.</div>
  </aside>
  <section class="viewport-shell" aria-label="3D model workspace">
@@ -98,9 +104,10 @@
    <button id="focus-collision" class="secondary full">Zoom to largest contact</button>
    <details><summary>Measured overlaps</summary><div id="collision-samples" class="hint"></div></details>
   </section>
+  <div id="accept-controls" hidden><label for="part-name">Part name</label><input id="part-name" maxlength="80" value="Part 1"><button id="accept-part" class="primary full">Add part <span>ï¼‹</span></button><p class="hint">Keep this cut and continue on the remaining body.</p></div>
   <details id="validation" hidden><summary>Cut Check <span class="valid-mark" aria-label="Checks passed">✓</span></summary><div id="checks"></div></details>
   <button id="export" class="secondary full" disabled>Save export <span>↓</span></button>
-  <p class="export-note">Aligned 3MF + cut settings. Individual STLs are included when their precision checks pass. One excision per export. The exported base uses one colour; its other original paint regions are not retained yet.</p>
+  <p class="export-note">Aligned 3MF + cut settings. Individual STLs are included when their precision checks pass. Add each preview to Parts to include it in a multi-part export. Unticked items are omitted. The exported base uses one colour; its other original paint regions are not retained yet.</p>
  </aside>
 </main>
 <footer><span id="bottom-status">Ready to open a model</span><span>MILLIMETRES <b>·</b> <span id="connection-status">PLAIN INSERT</span></span></footer>

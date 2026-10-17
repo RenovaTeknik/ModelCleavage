@@ -331,12 +331,18 @@ def cut_region(model: PaintedModel, params: CutParameters):
     limit = float((model.source.vertices @ n).max()) + 1
 
     interface_report = {}
+    painted_bridge = None
     def cutter(side_gap, depth_gap):
         if params.mode == 'interface':
             from .interface import interface_sweep
             result, details = interface_sweep(selected, n, params.depth + depth_gap, model.triangles[model.region_ids != params.region], side_gap, params.root_taper_degrees, params.root_smoothing_mm, params.depth)
             if not (depth_gap or side_gap):
                 interface_report.update(details)
+            if painted_bridge is not None:
+                bridge=painted_bridge
+                gap=max(side_gap,depth_gap)
+                if gap>0:bridge=bridge.minkowski_sum(mf.Manifold.sphere(gap*1.03,16))
+                result=result+bridge
             return result + nominal_cutter if (depth_gap or side_gap) else result
 
         bottom = params.plane - params.depth - depth_gap
@@ -355,6 +361,14 @@ def cut_region(model: PaintedModel, params: CutParameters):
     nominal_cutter = cutter(0, 0)
     report('Splitting model')
     extracted, nominal_remainder = source.split(nominal_cutter)
+    painted_bridge_records=[]
+    if params.mode=='interface':
+        from .printability import painted_speck_bridge
+        painted_bridge,painted_bridge_records=painted_speck_bridge(extracted,source,selected,n)
+        if painted_bridge is not None:
+            nominal_cutter=nominal_cutter+painted_bridge
+            extracted,nominal_remainder=source.split(nominal_cutter)
+
     if extracted.volume() < .001:
         raise ValueError('This cut produces no usable solid. Check the direction and base plane.')
     if nominal_remainder.volume() < .001:
@@ -488,12 +502,14 @@ def cut_region(model: PaintedModel, params: CutParameters):
         warnings.append(f"Minimum-width filter joined {len(thin_fragments['nominal'])} thin body fragment(s) to the removable part; removed {len(thin_fragments['fit_only'])} thin fragment(s) from the clearance pocket. See measured widths in the report.")
     if any(cleanup.values()):
         warnings.append('Automatically removed microscopic specks or filled tiny cavities on the cut copy. Details are included in the export report.')
+    if painted_bridge_records:
+        warnings.append('Joined tiny cut-created painted slivers to the part using bounded existing material. Bridge dimensions are recorded in the validation report.')
     if counts['part'] > 1:
         warnings.append(f'The selected surface produces {counts["part"]} separate solid pieces in this direction.')
     if counts['base'] > 1:
         warnings.append(f'The remaining body separates into {counts["base"]} solids.')
     return CutResult(requested_params, extracted, remainder, nominal_remainder, {
-        'numerical_skin_relief':relief_report, 'fit_allowances':fit_allowances, 'glue_keys':glue_report, 'thin_fragment_filter':thin_fragments, 'closed': True, 'painted_surface_coverage':paint_coverage, 'nominal_recombination': True, 'cut_mode': params.mode, 'interface': interface_report, 'insertion_path': insertion_path, 'automatic_cleanup': cleanup,
+        'painted_sliver_bridges':painted_bridge_records, 'numerical_skin_relief':relief_report, 'fit_allowances':fit_allowances, 'glue_keys':glue_report, 'thin_fragment_filter':thin_fragments, 'closed': True, 'painted_surface_coverage':paint_coverage, 'nominal_recombination': True, 'cut_mode': params.mode, 'interface': interface_report, 'insertion_path': insertion_path, 'automatic_cleanup': cleanup,
         'cleanup_limits': {'component_volume_mm3': .001, 'component_extent_mm': 1., 'total_volume_mm3': cleanup_allowance, 'detached_base_sliver_volume_mm3':1e-6 if params.mode=='interface' else None, 'detached_base_sliver_thickness_mm':.0001 if params.mode=='interface' else None, 'detached_base_sliver_extent_mm':5. if params.mode=='interface' else None, 'profile_speck_volume_mm3': .006 if profile_resolution else None, 'profile_speck_extent_mm': .5 if profile_resolution else None},
         'border_smoothing': model.diagnostics.get('border_smoothing'),
         'source_cleanup_absolute_mm3': sum(abs(x['signed_volume_mm3']) for x in source_cleanup), 'missing_mm3': missing, 'excess_mm3': excess,

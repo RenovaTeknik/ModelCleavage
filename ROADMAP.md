@@ -1,6 +1,6 @@
 # Model Cleavage Roadmap
 
-Updated **16 October 2026**. This roadmap describes the v0.1.0 release and intended next stages. It is not a release schedule; priorities can change as geometry and printing tests expose new requirements. The first application source release is **v0.1.0 — First Cut**.
+Updated **17 October 2026**. This roadmap describes the v0.2.0 release and intended next stages. It is not a release schedule; priorities can change as geometry and printing tests expose new requirements. The current release is **v0.2.0 — Multiple Parts**.
 
 ## Working foundation
 
@@ -20,7 +20,7 @@ Updated **16 October 2026**. This roadmap describes the v0.1.0 release and inten
 - [x] Export aligned multipart 3MF assemblies, validation settings and precision-checked STLs.
 - [x] Keep desktop viewer height stable with independently scrolling panels.
 
-## v0.1.x — Geometry reliability and inspection
+## Continuing geometry reliability and inspection
 
 - [ ] Expand regression coverage across organic meshes, imperfect paint borders, narrow features, holes and returning geometry.
 - [ ] Detect attached thin walls, fins and spurs, beyond the current detached-fragment filter.
@@ -30,19 +30,20 @@ Updated **16 October 2026**. This roadmap describes the v0.1.0 release and inten
 - [ ] Preserve remaining original paint regions in exported base meshes.
 - [ ] Improve cut performance through profiling, reusable computations and local geometry processing while retaining full-feature coverage checks.
 
-## v0.2.0 target — Project workflow and multiple parts
+## v0.2.0 — Multiple parts
 
-- [ ] Excise several parts within one working model.
-- [ ] Give parts stable identities and user-defined names.
-- [ ] Reverse an individual cut, explicitly handling later cuts that depend on it.
-- [ ] Reset the model to its original project state.
-- [ ] Export only selected parts while retaining assembly alignment.
+- [x] Excise several parts within one working model.
+- [x] Give parts stable identities and user-defined names.
+- [x] Undo the last accepted cut.
+- [ ] Reverse an arbitrary earlier cut, explicitly handling later cuts that depend on it.
+- [x] Reset the model to its original project state.
+- [x] Export only selected parts while retaining assembly alignment.
 - [ ] Save and load local projects, including source geometry, approved repairs, edits, named parts, cut settings and reversible history.
 - [x] Publish the application source, BasicShapes example and documented dependency setup.
 
 Project persistence and section inspection are provisional v0.3.0 goals. A v1.0.0 release needs a dependable documented workflow and broader model and physical-print validation.
 
-Stable part identities and a dependency-aware cut history are prerequisites for reliable selective undo and project persistence.
+Stable part identities are in place. Dependency-aware replay is still needed for arbitrary earlier-cut reversal and project persistence.
 
 ## Later revisions — Interactive junction editing
 

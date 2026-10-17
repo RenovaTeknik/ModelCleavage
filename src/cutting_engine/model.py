@@ -19,6 +19,18 @@ PRODUCTION = '{http://schemas.microsoft.com/3dmanufacturing/production/2015/06}'
 DIRECTIONS = {'+X': [1, 0, 0], '-X': [-1, 0, 0], '+Y': [0, 1, 0], '-Y': [0, -1, 0], '+Z': [0, 0, 1], '-Z': [0, 0, -1]}
 
 
+def triangle_normals(triangles):
+    """Keep one normal per input face, including zero normals for invalid faces.
+
+    Trimesh compacts normals for degenerate triangles; callers using face masks
+    need the original indexing preserved.
+    """
+    normals, valid = trimesh.triangles.normals(triangles)
+    aligned = np.zeros((len(triangles), 3), dtype=float)
+    aligned[valid] = normals
+    return aligned
+
+
 def interface_direction(triangles):
     normals=np.cross(triangles[:,1]-triangles[:,0],triangles[:,2]-triangles[:,0])
     coverage=np.abs(normals).sum(axis=0)
@@ -109,6 +121,15 @@ class PaintedModel:
     archive_source: dict | None = None
     repair_export: dict | None = None
 
+    socket_history: list = field(default_factory=list)
+    display_triangles: int | None = None
+
+    def __setstate__(self, state):
+        """Upgrade snapshots made before multi-part session fields existed."""
+        self.__dict__.update(state)
+        self.__dict__.setdefault("socket_history", [])
+        self.__dict__.setdefault("display_triangles", None)
+
     @property
     def cut_ready(self):
         return bool(self.source.is_watertight and self.source.is_winding_consistent and self.source.volume > 0)
@@ -127,7 +148,7 @@ class PaintedModel:
         ids = self.region_ids == region
         points = self.triangles[ids]
         areas = trimesh.triangles.area(points)
-        normal = trimesh.triangles.normals(points)[0]
+        normal = triangle_normals(points)
         candidates = []
         for direction, vector in DIRECTIONS.items():
             n = np.array(vector)
@@ -145,10 +166,11 @@ class PaintedModel:
         return {'direction': chosen[2], 'plane': chosen[3]}
 
     def payload(self):
-        return {'name': self.name, 'palette': self.palette, 'positions': packed(self.triangles),
-                'states': packed(self.states, '<u4'), 'region_ids': packed(self.region_ids, '<u4'),
+        count=self.display_triangles if self.display_triangles is not None else len(self.triangles)
+        return {'body_positions':packed(self.source.triangles) if self.display_triangles is not None else '', 'name': self.name, 'palette': self.palette, 'positions': packed(self.triangles[:count]),
+                'states': packed(self.states[:count], '<u4'), 'region_ids': packed(self.region_ids[:count], '<u4'),
                 'regions': self.regions, 'bounds': self.source.bounds.tolist(),
-                'original_triangles': len(self.source.faces), 'paint_triangles': len(self.triangles),
+                'original_triangles': len(self.source.faces), 'paint_triangles': count,
                 'volume': float(self.source.volume), 'warnings': self.warnings,
                 'cut_ready': self.cut_ready, 'diagnostics': self.diagnostics,
                 'problem_positions': packed(self.source.triangles[problem_faces(self.source)]) if not self.cut_ready else ''}
